@@ -1,0 +1,18 @@
+# 超星学习通自动刷课 — Python 运行时依赖
+# 验证环境: Python 3.13.12 / Windows x64
+# 安装:     python -m venv .venv ; .venv\Scripts\python -m pip install -r requirements.txt
+
+# ---- 直接依赖（py/ 代码中直接 import） ----
+cryptography==50.0.2     # AES-CBC 加密登录手机号与密码 (encode.encrypt_by_AES)
+aiohttp==3.14.4          # 异步并发刷课 (task.finish_task_async)
+requests==2.34.2         # 同步刷课 + Session/Cookie 维护 (api.* / task.finish_task_sync)
+beautifulsoup4==4.15.0   # HTML 解析: 课程列表 / 章节结构 / 知识卡片 (api.*)
+lxml==6.1.3              # BeautifulSoup 使用的解析后端
+colorama==0.4.6          # 终端彩色输出 (api.print_course_info / task 进度行)
+tqdm==4.70.1             # 同步模式进度条 (task.finish_task_sync)
+
+# ---- 传递依赖 ----
+# cffi / pycparser / multidict / yarl / frozenlist / aiosignal / propcache /
+# attrs / aiohappyeyeballs / urllib3 / idna / charset-normalizer / certifi /
+# soupsieve / typing-extensions 由 pip 自动解析安装, 无需手写。
+# 如需完全复现当前环境: python -m pip freeze > requirements.lock.txt
