@@ -17,10 +17,10 @@ from pathlib import Path
 
 if __name__ == "__main__" and __package__ is None:
     this_file = Path(__file__).resolve()
-    root_dir = this_file.parent.parent  # 定位到 "超星学习通" 文件夹
+    root_dir = this_file.parent.parent  # 上级目录，作为包的搜索路径
     if str(root_dir) not in sys.path:
         sys.path.insert(0, str(root_dir))
-    __package__ = "py"  # 声明当前包名
+    __package__ = this_file.parent.name  # 目录名即包名，仓库被改名/换目录也能跑
 # ===== 修复代码结束 =====
 
 import os

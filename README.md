@@ -57,7 +57,7 @@ python -m venv .venv
 .venv\Scripts\python run.py
 ```
 
-> 入口脚本使用包内相对导入。若在 IDE 里直接运行单个文件报 `ImportError: attempted relative import with no known parent package`，请改为在项目上级目录执行 `python py/run.py`，或把 `run.py` 配置为运行入口。
+> 入口脚本使用包内相对导入，`run.py` / `main.py` 按**所在目录名**动态确定包名，因此仓库克隆成任何目录名（含连字符、空格、中文）都能直接 `python run.py`，不需要把目录改名。若在 IDE 里仍报 `ImportError: attempted relative import with no known parent package`，把运行配置的工作目录设为仓库根、入口脚本设为 `run.py` 即可。
 
 按提示输入手机号与密码，登录成功后进入课程菜单：
 
@@ -119,7 +119,7 @@ python -m venv .venv
 | 现象 | 原因与处理 |
 |------|------------|
 | `ModuleNotFoundError: cryptography` | venv 未装依赖，执行 `.venv\Scripts\python -m pip install -r requirements.txt` |
-| `ImportError: attempted relative import ...` | 未按包方式启动，改用 `python run.py` 或从上级目录 `python py/run.py` |
+| `ImportError: attempted relative import ...` | 未从仓库根启动。入口按目录名动态定位包，直接在仓库根执行 `python run.py` 即可，不要单独拷贝 `main.py` 到别处运行 |
 | 登录返回 `"status":false` | 账号密码错误、需要验证码，或 cookie 已过期（重新登录） |
 | `ananas/status` 返回 403 | 请求 cookie / `Referer` 不完整，或登录态失效；先重进课程 |
 | 进度上报 403 | 检查 `otherInfo` 是否被 `encodeURIComponent` / `quote` 编码过 |
