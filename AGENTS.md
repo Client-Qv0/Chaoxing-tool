@@ -403,7 +403,7 @@ GET STUDY_AJAX_URL?courseId={params['courseid']}&clazzid={params['clazzid']}&cha
 
 ---
 
-### 4.4 `./task.py` — 任务完成模块 (568行)
+### 4.4 `./task.py` — 任务完成模块 (590行)
 
 #### 4.4.1 辅助函数
 
@@ -526,14 +526,18 @@ Headers:
 > 批量异步入口，本身**不直接发 HTTP 请求**。内部流程：
 > 1. 创建 `asyncio.Semaphore(200)` 控制并发上限
 > 2. 创建 `asyncio.Event()` 停止信号
-> 3. 启动后台协程 `_keyboard_listener(stop_event)`（每 0.5s 通过 `run_in_executor` 检测 R 键）
+> 3. 启动后台协程 `_keyboard_listener(stop_event)`（每 0.5s 通过 `run_in_executor` 检测 R 键），单独保存句柄，**不放进待 gather 的任务列表**
 > 4. 遍历 `video_list`（每个元素须含 `parent_chapter` 和 `chapter_name` 字段）：
 >    - 取出 `parent_chapter` → `base_chapter_name`
 >    - 取出 `chapter_name` → `task_name`
 >    - 创建 `delayed_task` 协程：`await asyncio.sleep(delay)` + 检查 `stop_event` + `await finish_task_async(...)`
 >    - `delay = random.uniform(0.5, 1.5) * (i + 1)`（递增延迟分散压力）
-> 5. `asyncio.gather(*tasks)` 并发执行
+> 5. `await asyncio.gather(*work_tasks, return_exceptions=True)` **只等待刷课任务**；`finally` 中 `listener.cancel()` 回收监听协程
+>    - 监听协程仅在 `stop_event` 置位时自行退出，若与任务一起 gather，全部任务完成后本函数永不返回（表现为刷完课后卡死、回不到主菜单）
+>    - `return_exceptions=True` 保证个别任务协程异常时不中断整体等待，其余正在上报的视频不会被事件循环收尾强制取消
+>    - 监听协程被取消或自身抛异常（如非交互终端下 `msvcrt` 报 `OSError`）一律吞掉，不影响刷课结果；`KeyboardInterrupt` 不在捕获范围
 > 6. 打印结果：`stop_event.is_set()` → `[R] 所有视频任务已取消`；否则 → `0v0 所有视频任务完成！`
+> 7. 统计 `results` 中的异常项，非 0 时追加一行 `[!] N 个任务协程异常退出，可重新进入课程重试`
 
 ---
 

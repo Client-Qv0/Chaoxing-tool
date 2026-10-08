@@ -542,10 +542,16 @@ async def finish_all_tasks_async(
         base_enc: 课程章节加密标识
         cookies: 登录后的 cookies 字典
         course_name: 课程名称
+
+    Returns:
+        None。所有任务结束或被 R 取消后返回，返回前取消键盘监听协程。
     """
     semaphore = asyncio.Semaphore(200)
     stop_event = asyncio.Event()
-    tasks = [asyncio.ensure_future(_keyboard_listener(stop_event))]
+    # 键盘监听是后台协程，只在 stop_event 置位时才退出，因此不能和刷课任务放进
+    # 同一个 gather：否则所有任务跑完后 gather 仍在等监听协程，本函数永不返回。
+    listener = asyncio.ensure_future(_keyboard_listener(stop_event))
+    work_tasks = []
     for i, params in enumerate(video_list):
         delay = random.uniform(0.5, 1.5) * (i + 1)
         base_chapter_name = params.pop('parent_chapter', '未知章节')
@@ -559,10 +565,26 @@ async def finish_all_tasks_async(
                 return
             return await finish_task_async(base_enc, p, cookies, semaphore, se, course_name, cn, tn)
 
-        tasks.append(asyncio.ensure_future(delayed_task()))
+        work_tasks.append(asyncio.ensure_future(delayed_task()))
 
-    await asyncio.gather(*tasks)
+    try:
+        # return_exceptions=True: 个别任务协程抛异常时不中断整体等待，
+        # 避免其余正在上报的视频被事件循环收尾时强制取消。
+        results = await asyncio.gather(*work_tasks, return_exceptions=True)
+    finally:
+        listener.cancel()
+        try:
+            await listener
+        except (asyncio.CancelledError, Exception):
+            # 键盘监听只是辅助协程：被取消、或因 msvcrt 在非交互终端抛 OSError，
+            # 都不应影响刷课结果与收尾输出。KeyboardInterrupt 不在捕获范围内。
+            pass
+
     if stop_event.is_set():
         print("\n[R] 所有视频任务已取消")
     else:
         print("0v0 所有视频任务完成！")
+
+    failures = [r for r in results if isinstance(r, BaseException)]
+    if failures:
+        print(f"[!] {len(failures)} 个任务协程异常退出，可重新进入课程重试")
