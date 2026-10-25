@@ -4,6 +4,8 @@
 
 本项目是一个基于 Python 的命令行工具，用于自动完成**超星学习通**（Chaoxing）平台上的课程任务点，包括视频播放和 PPT/文档浏览。支持两种刷课模式：**同步逐步完成**和**异步并发完成**。
 
+登录后先进入**模式选择**：`1` 刷课模式（现有完整流程），`2` 刷题模式（当前仅为菜单骨架，作业流程待开发）。
+
 ### 技术栈与依赖
 
 依赖版本已在 `requirements.txt` 中锁定，实际验证环境为 **Python 3.13.12 / Windows x64**。
@@ -50,6 +52,11 @@ python -m venv .venv
   task.py            ← 同步/异步刷视频 + PPT，支持按 R 取消
   encode.py          ← AES 加密、enc 签名、Cookie 解析
   config.py          ← API 端点 URL、AES 密钥常量
+  settings.py        ← .env 读写：LLM base_url / model / api_key（含掩码与清除）
+  .env               ← 实际配置，明文存储，已被 .gitignore 排除
+  .env.example       ← 配置模板，入库
+  quiz/
+    task.py          ← 刷题模式菜单骨架（0 设置 / 1 章节作业 / 2 流动作业 / r 清除）
 ```
 
 ### 文件关系与依赖
@@ -85,6 +92,14 @@ python -m venv .venv
 
 ./config.py
   └── 提供: 所有 API URL 常量、AES_KEY、COMMON_HEADERS
+
+./settings.py
+  └── 提供: load_settings, save_settings, delete_settings, prompt_settings,
+            settings_summary, parse_env_file, write_env_file, mask_secret
+
+./quiz/task.py
+  ├── from .. import settings
+  └── 提供: run_quiz_mode（刷题菜单循环，返回后回到模式菜单）
 ```
 
 ---
@@ -541,16 +556,26 @@ Headers:
 
 ---
 
-### 4.5 `./main.py` — 主入口 (189行)
+### 4.5 `./main.py` — 主入口 (219行)
 
-> 运行 CLI 交互循环，包含两级菜单。
+> 运行 CLI 交互循环，包含三级菜单：模式选择 → 课程列表 → 课程内操作。
 
-#### 一级菜单（课程选择）
+#### 零级菜单（模式选择）
+
+```
+输入 1 → 刷课模式 (_course_menu)：课程列表 → 章节 → 完成任务点
+输入 2 → 刷题模式 (quiz.task.run_quiz_mode)：菜单骨架，1/2 目前只提示「功能待开发」
+输入 -1 → 退出程序
+```
+
+两个模式退出后都回到这里。
+
+#### 一级菜单（课程列表，刷课模式内）
 
 ```
 输入课程编号 (1 ~ len(course_list)) → 进入课程主界面
 输入 0      → 打印 Cookie (pprint session.cookies.get_dict())
-输入 -1     → 退出程序 (os.system('pause') + return)
++'pause') + return)
 ```
 
 输入课程编号后，自动调用 `get_course_detail()` 获取章节，然后进入二级菜单。
@@ -572,6 +597,18 @@ Headers:
 输入 0  → 打印章节信息 (print_course_info)
 输入 r  → 退出当前课程，返回课程列表 (option_key = -2)
 ```
+
+#### 刷题模式菜单（`./quiz/task.py`，51 行）
+
+```
+输入 0  → 设置 base_url / model_name / api_key，写入 .env（回车保留原值）
+输入 1  → 课程章节作业 studentstudy → doHomeWorkNew（待开发）
+输入 2  → 流动作业 dowork（待开发）
+输入 r  → 从 .env 强行删除本工具保存的三个键并返回模式菜单
+输入 -1 → 返回模式菜单
+```
+
+考试类题目不在本工具范围内，不预留入口。
 
 ---
 
@@ -693,6 +730,8 @@ mv 课程 - 章节 - 任务名:  33%|██████______________| 60/180秒
 
 | 按键 | 上下文 | 效果 |
 |------|--------|------|
+| 数字 `1` / `2` | 模式选择界面 | 进入刷课 / 刷题模式 |
+| `-1` | 模式选择界面 | 退出程序 |
 | 数字 `1`~`N` | 课程列表界面 | 进入对应课程 |
 | `0` | 课程列表界面 | 打印 Cookie |
 | `-1` | 课程列表界面 | 退出程序 |
@@ -701,6 +740,8 @@ mv 课程 - 章节 - 任务名:  33%|██████______________| 60/180秒
 | `-2` | 课程内界面 | 重新获取章节信息 |
 | `0` | 课程内界面 | 打印章节信息 |
 | `r` | 课程内界面 | 返回课程列表 |
+| `r` | 课程列表界面 | 返回模式选择 |
+| `0` / `r` | 刷题界面 | 写入 .env / 清除配置并返回 |
 | `R` | 刷视频过程中 | **取消当前刷课**，回到课程内界面 |
 
 ---
@@ -731,3 +772,8 @@ mv 课程 - 章节 - 任务名:  33%|██████______________| 60/180秒
 6. **Session 管理**：`requests.Session` 统一管理所有请求的 Cookie 和 Header，登录后自动保存，无需手动传递。
 7. **文档脱敏**：本文档中的 cookie、fid、课程名、章节名一律为占位符或示例值，真实抓包（`cpi` / `userid` / `clazzid` / `courseid` / `dtoken` / `jtoken` / `enc`）禁止写入仓库，也不要把 `main.py` 一级菜单 `0` 打印出的 cookie 粘贴到 issue 或聊天记录。
 8. **PPT/视频判断**：依据 `try: jtoken = attachment['jtoken']` → PPT；`except KeyError` 且 `'objectId' in attachment` → 视频。`enc` 字段虽被提取但不参与判断也不发送。
+
+9. **LLM 配置存储**：base_url / model_name / api_key 明文存于 `.env`（`settings.py` 读写），`.env` 与 `.env.*` 已在 `.gitignore` 排除，仓库内只保留无密钥的 `.env.example`。进程环境变量（`CHAOXING_LLM_*`）优先于文件；摘要打印时 api_key 一律掩码，避免截图顺手泄露。
+10. **刷题模式状态**：目前仅是 `main.py` 之下的菜单骨架，不发起任何作业请求；`config.py` 中不保留未经抓包验证的作业端点常量。
+
+11. **课程列表首屏**：`_course_menu()` 靠 `option_key` 哨兵控制是否重画列表，初值必须是**非 0**（现为 `-2`）。写成 `0` 会导致进入刷课模式后不出课程列表；非法输入分支也要保持 `continue`，否则会掉进 `== 0` 打印 cookie。

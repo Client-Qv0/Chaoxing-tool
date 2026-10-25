@@ -15,7 +15,10 @@
 | 异步并发刷课 | ✅ | `asyncio` + 信号量（上限 200），一次刷完整门课 |
 | 同步顺序刷课 | ✅ | 逐任务点执行，带 `tqdm` 进度条，便于逐个确认 |
 | 中途取消 | ✅ | 刷课过程中按 <kbd>R</kbd> 停止（仅 Windows，依赖 `msvcrt`） |
-| 作业 / 试题 / 考试 | ❌ | **尚未实现**，见 [开发计划](#开发计划) |
+| 模式选择菜单 | ✅ | 登录后分流「刷课 / 刷题」两条路径 |
+| LLM 接口配置 | ✅ | `.env` 保存 base_url / model_name / api_key，可一键清除 |
+| 作业 / 试题 | 🚧 | 菜单骨架已就位，答题流程**未开发**（见开发计划） |
+| 考试 | ❌ | 含人机验证，不在本工具范围，不预留入口 |
 
 ## 环境要求
 
@@ -41,6 +44,12 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 ```
 
+刷题模式需要 OpenAI 兼容接口时，复制模板再填值（`.env` 不会被提交）：
+
+```bash
+copy .env.example .env
+```
+
 装完自检一行，确认解释器与依赖对得上：
 
 ```powershell
@@ -56,6 +65,8 @@ python -m venv .venv
 ```bash
 .venv\Scripts\python run.py
 ```
+
+> 登录成功后进入**模式选择**：`1` 刷课模式（视频 / PPT 任务点，功能完整）；`2` 刷题模式（章节作业 / 流动作业，当前为骨架）。
 
 > 入口脚本使用包内相对导入，`run.py` / `main.py` 按**所在目录名**动态确定包名，因此仓库克隆成任何目录名（含连字符、空格、中文）都能直接 `python run.py`，不需要把目录改名。若在 IDE 里仍报 `ImportError: attempted relative import with no known parent package`，把运行配置的工作目录设为仓库根、入口脚本设为 `run.py` 即可。
 
@@ -89,6 +100,10 @@ python -m venv .venv
 ├── task.py            同步 / 异步完成任务点（视频 + PPT），取消机制
 ├── encode.py          AES-CBC 加密、Cookie 解析、视频 enc 签名
 ├── config.py          API 端点 URL、AES 密钥、通用请求头
+├── settings.py        .env 读写：LLM base_url / model / api_key（掩码、清除）
+├── quiz/task.py       刷题模式菜单骨架
+├── .env               本地配置，明文存储，已被 .gitignore 排除
+├── .env.example       配置模板（不含密钥，入库）
 ├── requirements.txt   pip 依赖清单（版本锁定）
 └── AGENTS.md          详细设计文档（数据结构、函数清单、API 速查）
 ```
@@ -141,6 +156,9 @@ python -m venv .venv
 ## 开发计划
 
 - [ ] **作业 / 试题任务点**（当前完全未覆盖：附件既无 `jtoken` 也无 `objectId` 时会被静默跳过）
+  - 现状：`quiz/task.py` 仅是菜单骨架，输入 1 / 2 只提示「功能待开发」，不发起任何作业请求
+  - 待补：`knowledge/cards` 中作业类附件的判别字段、答题页 URL、题型与提交体格式，需真实抓包确认后再实现，不凭猜测打接口
+  - 作答来源已留接缝：答案由使用者本人给出，本仓库不内置模型代答并自动提交的实现
   - 题目解析：题型识别 + 选项 `id → A/B/C/D` 映射
   - 答案来源可插拔：终端手动作答 → 大模型作答
   - 提交与次数限制处理

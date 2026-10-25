@@ -1,3 +1,9 @@
 .idea
 .venv
 __pycache__
+# LLM 接口配置（明文 api key），绝不入库
+.env
+.env.*
+!.env.example
+# 兼容旧实现遗留的配置文件
+.llm_config.json
