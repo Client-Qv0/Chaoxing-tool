@@ -1,10 +1,9 @@
 """超星学习通自动刷课工具 - 主入口。
 
-提供交互式命令行界面，支持：
-- 手机号+密码登录
-- 查看课程列表和章节详情
-- 一键异步完成所有任务点
-- 逐步同步完成所有任务点
+登录成功后先进入模式选择，再进入各自菜单：
+
+- 模式 1 刷课：课程列表 → 章节详情 → 异步 / 同步完成任务点
+- 模式 2 刷题：接口配置 → 章节作业 / 流动作业（协议待抓包确认）
 """
 
 """
@@ -23,76 +22,65 @@ if __name__ == "__main__" and __package__ is None:
     __package__ = this_file.parent.name  # 目录名即包名，仓库被改名/换目录也能跑
 # ===== 修复代码结束 =====
 
-import os
 import asyncio
+import os
+import pprint
 import warnings
 
-import requests
-import pprint
 import colorama
+import requests
 
 from .api import (
-    login, get_user_info, get_courses_info,
-    show_courses_detail, get_course_detail,
-    print_course_info,
+    get_course_detail, get_courses_info, get_user_info, login,
+    print_course_info, show_courses_detail,
 )
-from .task import finish_task_sync, finish_all_tasks_async
+from .quiz.task import run_quiz_mode
+from .task import finish_all_tasks_async, finish_task_sync
 
 warnings.filterwarnings("ignore")
 
 
-def main() -> None:
-    """运行超星学习通自动刷课 CLI 主程序。
+def _course_menu(session, course_list: list[dict]) -> None:
+    """模式 1：刷课菜单（课程列表 → 章节 → 完成任务点）。
 
-    流程：登录 -> 获取用户信息 -> 选择课程 -> 查看章节 -> 完成任务点。
+    Args:
+        session: 已登录的 requests.Session 实例
+        course_list: 课程列表
     """
-    colorama.just_fix_windows_console()
-
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0',
-    })
-
-    status_login = False
-    while not status_login:
-        status_login = login(session)
-
-    get_user_info(session)
-    course_list = get_courses_info(session)
-
     option_key = -2
     while True:
         if option_key != 0:
             show_courses_detail(course_list)
 
-        option_key = input('输入课程编号，进入课程主界面\n输入0 打印用户的cookie\n输入-1 退出程序\n编号>')
+        option_key = input(
+            '输入课程编号，进入课程主界面\n'
+            '输入0 打印用户的cookie\n'
+            '输入-1 退出刷课模式\n编号>')
         if option_key == '':
             option_key = 0
             continue
-        else:
-            try:
-                option_key = int(option_key)
-            except ValueError:
-                print(f"'{option_key}'不是有效数字QAQ，请重新输入:")
-                option_key = 0
-                continue
-
-        if option_key == -1:
-            print('程序已退出0v0~')
-            os.system('pause')
+        if option_key == '-1':
             return
-
-        if option_key <= -2:
+        try:
+            option_key = int(option_key)
+        except ValueError:
+            print(f"'{option_key}'不是有效数字QAQ，请重新输入:")
+            option_key = 0
             continue
+        if option_key == -1:
+            return
 
         if option_key == 0:
             pprint.pprint(session.cookies.get_dict())
             continue
-
+        if option_key < 0:
+            option_key = 0
+            continue
         if option_key > len(course_list):
             print(f"{option_key}超出范围了QAQ，请重新输入:")
             option_key = 0
             continue
+
 
         option_key -= 1
         key = -2
@@ -100,6 +88,7 @@ def main() -> None:
         while True:
             if key == -2:
                 try:
+                    os.system('cls')
                     last_course_info = get_course_detail(
                         session,
                         course_list[option_key]['course_name'],
@@ -111,6 +100,7 @@ def main() -> None:
                 key = 0
 
             if key == 0:
+                os.system('cls')
                 print_course_info(last_course_info)
 
             elif key == 1:
@@ -171,6 +161,7 @@ def main() -> None:
                 '输入r 退出当前课程\n->'
             )
             if key == 'r':
+                os.system('cls')
                 option_key = -2
                 break
             elif key == '':
@@ -183,6 +174,49 @@ def main() -> None:
                     print(f"'{key}'不是有效数字QAQ，请重新输入:")
                     key = -99999
                     continue
+
+
+def main() -> None:
+    """运行超星学习通自动刷课 CLI 主程序。
+
+    流程：登录 → 模式选择（1 刷课 / 2 刷题）→ 进入对应菜单。
+    """
+    colorama.just_fix_windows_console()
+
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0',
+    })
+
+    status_login = False
+    while not status_login:
+        status_login = login(session)
+
+    get_user_info(session)
+    course_list = get_courses_info(session)
+
+    while True:
+        mode = input(
+            f'{colorama.Fore.GREEN}~~ 请选择工作模式 ~~{colorama.Style.RESET_ALL}\n'
+            '输入1 进入刷课模式（视频 / PPT 任务点）\n'
+            '输入2 进入刷题模式（章节作业 / 流动作业）\n'
+            '输入-1 退出程序\n->'
+        ).strip()
+
+        if mode == '1':
+            _course_menu(session, course_list)
+            os.system('cls')
+        elif mode == '2':
+            run_quiz_mode(session, course_list)
+            os.system('cls')
+        elif mode == '-1':
+            print('程序已退出0v0~')
+            os.system('pause')
+            return
+        elif mode == '':
+            continue
+        else:
+            print(f"'{mode}' 不是有效选项QAQ")
 
 
 if __name__ == '__main__':
