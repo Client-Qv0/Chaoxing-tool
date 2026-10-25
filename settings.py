@@ -10,7 +10,9 @@
 - ``CHAOXING_LLM_MODEL``
 - ``CHAOXING_LLM_API_KEY``
 
-密钥在 .env 中为**明文存储**，靠「不进仓库 + 文件只留在本机」控制暴露面；打印摘要时仍做掩码，避免截图/粘贴 issue 时顺带泄露。`n`n格式解析由本模块自带（不依赖 python-dotenv），支持 ``KEY=value``、``export KEY=value``、
+密钥在 .env 中为**明文存储**，靠「不进仓库 + 文件只留在本机」控制暴露面；
+打印摘要时仍做掩码，避免截图/粘贴 issue 时顺带泄露。格式解析由本模块自带
+（不依赖 python-dotenv），支持 ``KEY=value``、``export KEY=value``、
 可选引号、``#`` 注释与空行；写回时保留文件里其它无关变量与原注释行。
 """
 
@@ -166,21 +168,36 @@ def save_settings(base_url: str, model: str, api_key: str) -> Path:
     return write_env_file({ENV_BASE_URL: base_url, ENV_MODEL: model, ENV_API_KEY: api_key})
 
 
-def delete_settings() -> bool:
-    """从 .env 中强行删除本模块管理的三个键（url / model / api_key）。
-
-    删完后若文件里已无其它内容，则连带删除文件本身。
+def env_override_keys() -> list[str]:
+    """返回当前由进程环境变量覆盖的受管配置项。
 
     Returns:
-        True 表示确实移除了至少一个键，False 表示本来就没有
+        值非空的受管环境变量名列表；没有覆盖时为空列表
+    """
+    return [key for key in MANAGED_KEYS if os.environ.get(key)]
+
+
+def delete_settings() -> bool | None:
+    """从 .env 中删除本模块管理的三个键（url / model / api_key）。
+
+    删完后若文件里已无其它内容，则连带删除文件本身。进程环境变量无法在此
+    清除，调用方可用 :func:`env_override_keys` 检查它们是否仍然生效。
+
+    Returns:
+        True 表示 .env 中确实移除了至少一个键；False 表示没有可删的本地配置；
+        None 表示 .env 读取或写入失败
     """
     if not ENV_FILE.exists():
-        had_env = any(os.environ.get(k) for k in MANAGED_KEYS)
-        return bool(had_env)
+        return False
+
+    try:
+        lines = ENV_FILE.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return None
 
     kept: list[str] = []
     removed = 0
-    for line in ENV_FILE.read_text(encoding='utf-8').splitlines():
+    for line in lines:
         match = _LINE_RE.match(line)
         if match and match.group(1) in MANAGED_KEYS:
             removed += 1
@@ -188,10 +205,13 @@ def delete_settings() -> bool:
         kept.append(line)
 
     body = '\n'.join(kept).strip()
-    if body:
-        ENV_FILE.write_text(body + '\n', encoding='utf-8')
-    else:
-        ENV_FILE.unlink()
+    try:
+        if body:
+            ENV_FILE.write_text(body + '\n', encoding='utf-8')
+        else:
+            ENV_FILE.unlink()
+    except OSError:
+        return None
     return removed > 0
 
 

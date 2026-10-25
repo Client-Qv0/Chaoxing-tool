@@ -554,11 +554,16 @@ async def finish_all_tasks_async(
     work_tasks = []
     for i, params in enumerate(video_list):
         delay = random.uniform(0.5, 1.5) * (i + 1)
-        base_chapter_name = params.pop('parent_chapter', '未知章节')
-        task_name = params.pop('chapter_name', '未知任务')
+        base_chapter_name = params.get('parent_chapter', '未知章节')
+        task_name = params.get('chapter_name', '未知任务')
+        # 复制一份并去掉调度字段，避免就地 pop 修改 main.py 传入的原始任务列表
+        task_params = {
+            key: value for key, value in params.items()
+            if key not in ('parent_chapter', 'chapter_name')
+        }
 
         async def delayed_task(
-            p=params, d=delay, cn=base_chapter_name, tn=task_name, se=stop_event,
+            p=task_params, d=delay, cn=base_chapter_name, tn=task_name, se=stop_event,
         ):
             await asyncio.sleep(d)
             if se.is_set():

@@ -41,7 +41,15 @@ def run_quiz_mode(session, course_list: list[dict]) -> None:
             print(f'{Fore.YELLOW}  [ ] {name}：功能待开发，当前仅为菜单骨架{Style.RESET_ALL}')
         elif key.lower() == 'r':
             removed = settings.delete_settings()
-            print('  已清除本工具保存的配置项' if removed else '  本地没有可清除的配置项')
+            if removed is None:
+                print('  清除失败：.env 无法读取或写入')
+            elif removed:
+                print('  已清除 .env 中本工具保存的配置项')
+            else:
+                print('  .env 中没有可清除的配置项')
+            overrides = settings.env_override_keys()
+            if overrides:
+                print(f"  注意：进程环境变量仍在生效（{', '.join(overrides)}），请到系统环境变量中删除")
             return
         elif key == '-1':
             return
